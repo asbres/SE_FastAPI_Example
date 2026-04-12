@@ -3,17 +3,12 @@ from transformers import pipeline
 from PIL import Image, ImageOps
 import io
 
-# Настройка страницы
 st.set_page_config(page_title="Background Remover", layout="wide")
 
-# Заголовок
 st.title("Удаление фона с фото (RMBG-1.4)")
 st.write("Модель: [BRIA RMBG-1.4](https://huggingface.co/briaai/RMBG-1.4)")
 
 uploaded_file = st.file_uploader("Загрузите изображение", type=["jpg", "jpeg", "png"])
-if uploaded_file:
-    if st.button("Очистить кэш модели"):
-        st.cache_resource.clear()
 
 @st.cache_resource
 def load_pipeline():
