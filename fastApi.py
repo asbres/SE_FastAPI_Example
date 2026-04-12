@@ -46,12 +46,12 @@ async def remove_background(file: UploadFile = File(...)):
     image = read_image(file)
     pipe = get_pipeline()
 
-    result = pipe(image)
-    if isinstance(result, list):
-        result = result[0]
+    result_image = pipe(image)
+    if isinstance(result_image, list):
+        result_image = result_image[0]
 
     buf = io.BytesIO()
-    result.save(buf, format="PNG")
+    result_image.save(buf, format="PNG")
     buf.seek(0)
 
     return StreamingResponse(
