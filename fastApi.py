@@ -4,8 +4,14 @@ from transformers import pipeline
 from PIL import Image
 from functools import lru_cache
 import io
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
+
+ALLOWED_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 
 
 @lru_cache()
@@ -18,13 +24,7 @@ def get_pipeline():
 
 
 def read_image(upload_file: UploadFile) -> Image.Image:
-
-    if upload_file.content_type not in (
-        "image/jpeg",
-        "image/jpg",
-        "image/png",
-        "image/webp",
-    ):
+    if upload_file.content_type not in ALLOWED_TYPES:
         raise HTTPException(
             status_code=400,
             detail="Поддерживаются только изображения: jpg, jpeg, png, webp",
@@ -36,20 +36,22 @@ def read_image(upload_file: UploadFile) -> Image.Image:
 
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        return image
     except Exception:
         raise HTTPException(status_code=400, detail="Не удалось прочитать изображение")
-    return image
 
 
 @app.post("/remove-background")
-def remove_background(file: UploadFile = File(...)):
+async def remove_background(file: UploadFile = File(...)):
     image = read_image(file)
     pipe = get_pipeline()
 
-    pillow_image = pipe(image)
+    result = pipe(image)
+    if isinstance(result, list):
+        result = result[0]
 
     buf = io.BytesIO()
-    pillow_image.save(buf, format="PNG")
+    result.save(buf, format="PNG")
     buf.seek(0)
 
     return StreamingResponse(
@@ -60,15 +62,16 @@ def remove_background(file: UploadFile = File(...)):
 
 
 @app.post("/get-mask")
-def get_mask(file: UploadFile = File(...)):
-
+async def get_mask(file: UploadFile = File(...)):
     image = read_image(file)
     pipe = get_pipeline()
 
-    pillow_mask = pipe(image, return_mask=True)
+    mask = pipe(image, return_mask=True)
+    if isinstance(mask, list):
+        mask = mask[0]
 
     buf = io.BytesIO()
-    pillow_mask.save(buf, format="PNG")
+    mask.save(buf, format="PNG")
     buf.seek(0)
 
     return StreamingResponse(
@@ -76,3 +79,13 @@ def get_mask(file: UploadFile = File(...)):
         media_type="image/png",
         headers={"Content-Disposition": 'attachment; filename="mask.png"'},
     )
+
+
+@app.get("/health")
+async def health_check():
+    try:
+        pipe = get_pipeline()
+        return {"status": "ok", "model_loaded": pipe is not None}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(status_code=503, detail="Model not available")
